@@ -8,5 +8,8 @@ verify_ssl = true
 [packages]
 keyboard = "*"
 configparser = "*"
-pygame = "==2.0.0.dev6"
 pyserial = "*"
+pygame = "==2.0.0.dev6"
+
+[pipenv]
+allow_prereleases = true
