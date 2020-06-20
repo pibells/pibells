@@ -1,0 +1,12 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+
+[packages]
+keyboard = "*"
+configparser = "*"
+pygame = "==2.0.0.dev6"
+pyserial = "*"
