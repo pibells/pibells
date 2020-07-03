@@ -1,3 +1,4 @@
-pibells.log
-pibells.ini
-__pycache__
+/pibells.log
+/pibells.ini
+/__pycache__
+/.idea
