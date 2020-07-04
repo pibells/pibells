@@ -722,6 +722,7 @@ def main():
     path = os.path.dirname(os.path.abspath(filename))
     log_file = path + os.path.sep + "pibells.log"
     _config_file = path + os.path.sep + "pibells.ini"
+    sounds_dir = path + os.path.sep + "sounds"
     
     start_logging( log_file )
     
@@ -730,7 +731,7 @@ def main():
     
     global bell_sounds
     bell_sounds = bell_sound_player()
-    bell_sounds.load_sound_files( path, all_bell_file_names )
+    bell_sounds.load_sound_files( sounds_dir, all_bell_file_names )
     bell_sounds.load_valid_peals( define_valid_peals() )
     
     ReadConfigFile()
