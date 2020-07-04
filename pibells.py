@@ -738,7 +738,7 @@ def main():
     LoadConfigFile()
     ApplyLoggingLevel( False )
     
-    logger.info("Starting Pi Bongs")
+    logger.info("Starting Pi Bells")
     
     global photohead
     photohead = photohead_interface( device_name )

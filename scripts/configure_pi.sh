@@ -107,7 +107,7 @@ sudo systemctl start hostapd
 ## Host name setup
 sudo su -c "cat >> /etc/hosts <<EOF
 
-#PyBongs WiFi network
+#PiBells WiFi network
 192.168.250.1   pibells
 EOF" root
 
@@ -125,7 +125,7 @@ cd \${INSTALL_LOCATION} && chmod +x *.sh
 
 ## Configure crontab
 # See: https://stackoverflow.com/a/9625233 and https://stackoverflow.com/a/13355743
-printf "%b\n" "\${BOLD}\${BLUE}Configuring crontab to start pybells & frontail\${NO_COLOUR}"  | tee -a \${LOG_FILE}
+printf "%b\n" "\${BOLD}\${BLUE}Configuring crontab to start pibells & frontail\${NO_COLOUR}"  | tee -a \${LOG_FILE}
 printf "Crontab before\n"
 set +e; crontab -l; set -e
 
