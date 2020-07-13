@@ -1,9 +1,4 @@
-import sys
-import pygame
-import pygame.mixer as mixer
 from time import sleep
-import serial
-import datetime
 
 #Logging and file name establishment
 import inspect
@@ -17,17 +12,17 @@ import datetime
 #Keyboard interaction
 import keyboard
 
-#Config loader
-import configparser
-
 # Photohead interface
-from photohead_interface import photohead_interface
+from pibells.configuration import Configuration
+from pibells.photohead.photohead_interface import photohead_interface
 
 # Bell sounds
 from bell_sound_player import bell_sound_player, valid_peal
 
 # Demo playing
-from pibells_demo import pibells_demo, place_notation
+from pibells_demo import pibells_demo
+
+__config = None
 
 logger = logging.getLogger("PiBells") 
 
@@ -35,11 +30,7 @@ logger = logging.getLogger("PiBells")
 all_bell_sounds =[] #All the loaded bell sounds
 bell_sounds = [] #The currently selected bell sounds
 valid_peals = []
-num_bells = 12 #this is duplicated in the photohead_interface
 muted_bells = [] #toggle to 1 to mute
-default_delays = [1]*num_bells #Store the default delays (min value of 1) - these are loaded from the config file
-device_name = "/dev/ttyUSB0"    #USB port based
-#device_name = "/dev/ttyS0"      #Wired serial port/ Rpi version with RS232 to TTL converter 
 
 #Timers
 power_down_time_s = 3
@@ -47,13 +38,6 @@ restart_time_s = 3
 
 keep_looping_flag = 1
 
-# initialise variables for testing only. Will be read from GPIO eventually
-tenor = num_bells  # initialise tenor for testing only
-key_index = 0    # 0 is 12 bells in D
-logging_debug = False #default to no debug logging, as this can cause problems with playing the sound
-play_mode = True
-_config = configparser.ConfigParser()
-_config_file = ""
 photohead_response_time_s = 5
 awaiting_photohead_delays = False
 awaiting_photohead_time = 0
@@ -66,22 +50,7 @@ bell_sounds = None
 
 pb_demo = None
 
-#Store the loaded place notations, set the defaults, up to 12
-num_place_notations = 12
-place_notation_array = [
-    place_notation( "x16x16x16x16x16x16", False ),  #Plain hunt on 6
-    place_notation( "5.1.5.1.5-125", False ),       #Plain bob doubles, no covering tenor
-    place_notation( "5.1.5.1.5-125", True ),        #Plain bob doubles, with covering tenor
-    place_notation( "x16x16x16-12", True ),         #Plain bob minor, no covering tenor (wouldn't work anyway)
-    place_notation( "5.1.5.3.5-125", True ),        #Results in St Simon's Bob Doubles, with covering tenor
-    place_notation( "X14X16X16-12", False ),        #Results in Single Oxford Bob Minor
-    place_notation( "7.3.1.3.1.3", True ),          #Results in Erin triples with a cover
-    place_notation( "X14X36X58X18-18", False ),     #Results in Double Norwich Court Bob Major
-    place_notation( "3.1.9.1.9.1.9.1.9.1.9.1.9.1.9.1.9.1", True ),  #Results in Grandsire caters with covering tenor
-    place_notation( "X30X14X50X16X1270X38X14X50X16X90-12", False ), #Results in Yorkshire Royal
-    place_notation( "3.1.E.3.1.3-1", True ),        #Results in Stedman cinques
-    place_notation( "X1TX14-12", False ),           #Results in Little Bob Max
-    ]
+
 
 all_bell_file_names = [
     "twx0",
@@ -193,8 +162,8 @@ def ResetMutedBells():
     """ Reset the muted bells array to be all 0s
         i.e. no bells muted
     """
-    global muted_bells
-    muted_bells = [0]*num_bells
+    global muted_bells, __config
+    muted_bells = [0]*__config.num_bells
 
 def GetKeyboardBellNumber():
     """ Get the number of the bell that is being pressed by the keyboard
@@ -249,15 +218,14 @@ def GetKeyboardUpDown():
 def ApplyLoggingLevel( play_confirmation ):
     """ Set the logging level, with optional confirmation sound
     """
-    global logging_debug
     
-    if logging_debug:
+    if __config.logging_debug:
         logger.setLevel(logging.DEBUG)
         logger.info("Logging level set to DEBUG")
         
         if play_confirmation:
             global bell_sounds
-            bell_sounds.play_reference_bell( num_bells )
+            bell_sounds.play_reference_bell(__config.num_bells)
     else:
         logger.setLevel(logging.INFO)
         logger.info("Logging level set to INFO")
@@ -299,7 +267,7 @@ def HandleTenor():
         Will attempt to get the bell number and set the flag
         Will often fire once when the tenor key is pressed, then again when the number is pressed
     """
-    global bell_sounds
+    global bell_sounds, __config
     
     bell = GetKeyboardBellNumber()
     
@@ -313,14 +281,14 @@ def HandleTenor():
     #Play the sound to confirm the setting
     bell_sounds.play_bell( bell )
     
-    WriteConfigFile()
+    __config.WriteConfigFile()
 
 def HandleKey():
     """ Handle the case of setting the key of the tenor bell
         Will attempt to get the key character and set the value accordingly
         Will often fire once when the "key" key is pressed, then again when the note is pressed
     """
-    global bell_sounds
+    global bell_sounds, __config
     
     key_direction = GetKeyboardUpDown()
     if key_direction == 0:
@@ -336,18 +304,18 @@ def HandleKey():
     #Play the tenor bell sound
     bell_sounds.play_bell( bell_sounds.get_tenor() )
     
-    WriteConfigFile()
+    __config.WriteConfigFile()
 
 def HandleReset():
     """ Will handle when the reset key has been pressed
         Resets all bells to unmuted, the tenor to 12 and the key to the lowest
     """
-    global muted_bells
+    global muted_bells, __config
     ResetMutedBells()
     
     global bell_sounds
     bell_sounds.select_valid_peal( 0 )
-    bell_sounds.play_bell( num_bells )
+    bell_sounds.play_bell(__config.num_bells)
     
     logger.info("All settings reset")
 
@@ -355,20 +323,20 @@ def HandleLogging():
     """ Toggle the logging level between debug and info
         When setting to debug, play a sound to indicate this
     """
-    global logging_debug
-    logging_debug = not logging_debug
+    global __config
+    __config.logging_debug = not __config.logging_debug
     
     ApplyLoggingLevel( True )
-    WriteConfigFile()
+    __config.WriteConfigFile()
 
 def HandlePlay():
     """ Handle the toggling of the play mode
     """
-    global play_mode
-    play_mode = not play_mode
+    global __config
+    __config.play_mode = not __config.play_mode
     
-    logger.info("Setting play mode to %s", play_mode)
-    WriteConfigFile()
+    logger.info("Setting play mode to %s", __config.play_mode)
+    __config.WriteConfigFile()
 
 def HandleDelayChange( faster_flag ):
     """ Handle the case of reducing or increasing the programmed delay for a given bell
@@ -412,7 +380,7 @@ def HandleDefaultDelay():
     
     global photohead
     photohead.read_delays_from_photohead()
-    photohead.set_delay( bell, default_delays[bell-1] )
+    photohead.set_delay( bell, __config.default_delays[bell-1] )
     
     #Write the settings back to the device
     photohead.write_delays_to_photohead()
@@ -472,7 +440,7 @@ def HandleDemo():
         return
     pb_demo.stop() #just in case it was already running
     bell_index = bell-1
-    pb_demo = pibells_demo( bell_sounds, 0.2, place_notation_array[bell_index] )
+    pb_demo = pibells_demo( bell_sounds, 0.2, __config.place_notation_array[bell_index] )
     
     pb_demo.start()
     
@@ -543,168 +511,12 @@ def KeyboardCallback( event ):
     else: #Try and get the bell number
         #Play the bell based on the selected tenor and key
         bell = GetKeyboardBellNumber()
-        if bell and play_mode:
+        if bell and __config.play_mode:
             global bell_sounds
             bell_sounds.play_bell( bell )
         pb_demo.stop()
 
-#Configuration loading
-#=====================
-def ReadConfigFile():
-    global _config
-    global _config_file
-    configsLoaded = _config.read(_config_file)
-    if len(configsLoaded) != 1:
-        #print "Unable to load config file"
-        logger.info("Unable to load config file - creating default")
-        
-        #Create default config file
-        WriteConfigFile()
 
-def WriteConfigFile():
-    global _config
-    global bell_sounds
-    global place_notation_array
-    
-    try:
-        cfgfile = open(_config_file,'w')
-    except:
-        logger.info("Unable to open config file for writing")
-        return
-    
-    if not _config.has_section("settings"):
-        _config.add_section('settings')
-    
-    _config.set('settings','tenor',str( bell_sounds.get_tenor() ) )
-    _config.set('settings','key',str( bell_sounds.get_valid_peal_index() ) )
-    _config.set('settings','logging_debug',str(logging_debug))
-    _config.set('settings','play_mode',str(play_mode))
-    _config.set('settings','device_name',device_name)
-    
-    if not _config.has_section("delays"):
-        _config.add_section('delays')
-    
-    _config.set('delays', 'bell_1', str(default_delays[0]))
-    _config.set('delays', 'bell_2', str(default_delays[1]))
-    _config.set('delays', 'bell_3', str(default_delays[2]))
-    _config.set('delays', 'bell_4', str(default_delays[3]))
-    _config.set('delays', 'bell_5', str(default_delays[4]))
-    _config.set('delays', 'bell_6', str(default_delays[5]))
-    _config.set('delays', 'bell_7', str(default_delays[6]))
-    _config.set('delays', 'bell_8', str(default_delays[7]))
-    _config.set('delays', 'bell_9', str(default_delays[8]))
-    _config.set('delays', 'bell_10',str(default_delays[9]))
-    _config.set('delays', 'bell_11',str(default_delays[10]))
-    _config.set('delays', 'bell_12',str(default_delays[11]))
-    
-    if not _config.has_section("demo"):
-        _config.add_section('demo')
-    
-    for idx_place_notation in range( 0, len( place_notation_array ) ):
-        place_notation_name = "place_notation_" + str( idx_place_notation + 1 )
-        add_tenor_name = "add_tenor_" + str( idx_place_notation + 1 )
-        _config.set('demo', place_notation_name, str(place_notation_array[idx_place_notation].string))
-        _config.set('demo', add_tenor_name, str(place_notation_array[idx_place_notation].add_tenor))
-    
-    _config.write(cfgfile)
-    cfgfile.close()
-
-def ConfigSectionMap(section):
-    #From: https://wiki.python.org/moin/ConfigParserExamples
-    dict1 = {}
-    global _config
-    options = _config.options(section)
-    for option in options:
-        try:
-            dict1[option] = _config.get(section, option)
-            if dict1[option] == -1:
-                pass #DebugPrint("skip: %s" % option)
-        except:
-            #print("exception on %s!" % option)
-            dict1[option] = None
-    return dict1
-
-def LoadConfigFile():
-    logger.info("Loading config file")
-    
-    global tenor
-    global key_index
-    global logging_debug
-    global play_mode
-    global device_name
-    global default_delays
-    global place_notation_array
-    
-    try:
-        tenor_config = ConfigSectionMap("settings")['tenor']
-        if tenor_config is not None:
-            tenor = int( tenor_config )
-            logger.info("Loaded tenor as %d", tenor)
-        
-        key_config = ConfigSectionMap("settings")['key']
-        if key_config is not None:
-            key_index = int( key_config )
-            logger.info("Loaded key_index as %d", key_index)
-        
-        logging_debug_config = ConfigSectionMap("settings")['logging_debug']
-        if logging_debug_config is not None:
-            if logging_debug_config.lower() == 'true':
-                logging_debug = True
-            else:
-                logging_debug = False
-            logger.info("Loaded logging debug as %s", logging_debug)
-        
-        play_mode_config = ConfigSectionMap("settings")['play_mode']
-        if play_mode_config is not None:
-            if play_mode_config.lower() == 'true':
-                play_mode = True
-            else:
-                play_mode = False
-            logger.info("Loaded play mode as %s", play_mode)
-        
-        device_name_config = ConfigSectionMap("settings")['device_name']
-        if device_name_config is not None:
-            device_name = device_name_config
-            logger.info("Loaded device name is %s", device_name)
-        
-        #Load the default delays
-        for idx in range(0,12):
-            default_delay_config = ConfigSectionMap("delays")['bell_'+str(idx+1)]
-            if default_delay_config is not None:
-                default_delays[idx] = int( default_delay_config )
-            else:
-                logger.info("Unable to load default delay for bell %d from the config",(idx+1) )
-        
-        logger.debug("Loaded the following default delays from the ini file: 1. %d, 2. %d, 3. %d, 4. %d, 5. %d, 6. %d, 7. %d, 8. %d, 9. %d, 10. %d, 11. %d, 12. %d",
-            default_delays[0], default_delays[1], default_delays[2], default_delays[3], default_delays[4], default_delays[5],
-            default_delays[6], default_delays[7], default_delays[8], default_delays[9], default_delays[10], default_delays[11])
-        
-        #Load the demos to play - check they are present
-        place_notation_config = ConfigSectionMap("demo")['place_notation_1']
-        if place_notation_config is not None:
-            #Load all the configs we have
-            #Clear the current place notations as loading new ones
-            place_notation_array = []
-            
-            for idx_place_notation in range (0 , num_place_notations ) :
-                place_notation_name = "place_notation_" + str( idx_place_notation + 1 )
-                add_tenor_name = "add_tenor_" + str( idx_place_notation + 1 )
-                
-                place_notation_config = ConfigSectionMap("demo")[place_notation_name]
-                add_tenor_config = ConfigSectionMap("demo")[add_tenor_name]
-                
-                if place_notation_config is None or add_tenor_config is None:
-                    logger.info("Error loading place notation at %d, this will be dropped", idx_place_notation )
-                else:
-                    if add_tenor_config.lower() == 'true':
-                        add_tenor = True
-                    else:
-                        add_tenor = False
-                    place_notation_array.append( place_notation( str(place_notation_config), add_tenor ) )
-        
-        
-    except Exception as e:
-        logger.exception("Error loading config file")
 
 #Start the logging
 def start_logging( file_name ):
@@ -717,11 +529,12 @@ def start_logging( file_name ):
     logger.addHandler(handler)
 
 def main():
-    global _config_file
+    global __config
+
     filename = inspect.getframeinfo(inspect.currentframe()).filename
     path = os.path.dirname(os.path.abspath(filename))
     log_file = path + os.path.sep + "pibells.log"
-    _config_file = path + os.path.sep + "pibells.ini"
+    __config = Configuration(path + os.path.sep + "pibells.ini")
     sounds_dir = path + os.path.sep + "sounds"
     
     start_logging( log_file )
@@ -734,22 +547,19 @@ def main():
     bell_sounds.load_sound_files( sounds_dir, all_bell_file_names )
     bell_sounds.load_valid_peals( define_valid_peals() )
     
-    ReadConfigFile()
-    LoadConfigFile()
+    __config.ReadConfigFile()
+    __config.LoadConfigFile()
     ApplyLoggingLevel( False )
     
     logger.info("Starting Pi Bells")
     
     global photohead
-    photohead = photohead_interface( device_name )
+    photohead = photohead_interface(__config.device_name)
     #Could check for success, but doesn't really matter
     photohead.connect()
-    
-    global key_index
-    bell_sounds.select_valid_peal( key_index )
-    
-    global tenor
-    bell_sounds.select_tenor( tenor )
+
+    bell_sounds.select_valid_peal(__config.key_index)
+    bell_sounds.select_tenor( __config.num_bells )
     
     #Setup the demo
     global pb_demo
@@ -803,7 +613,7 @@ def main():
 
 #This is the function that will run
 if __name__ == '__main__':
-    
+
     try:
         main()
     except KeyboardInterrupt:

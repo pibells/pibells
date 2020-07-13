@@ -133,7 +133,7 @@ class place_notation_processor:
         elif character >= '1' and character <= '9':
             bell = int( character )
         
-        if bell is not 0:
+        if bell != 0:
             return bell - 1
         
         return None
@@ -168,7 +168,7 @@ class place_notation_processor:
             returns the bell index (0 to num_bells-1), or -1 at the end of a change to create a delay
         """
         #Leave a gap at the hand stroke lead
-        if self.new_change and (self.changes_count % 2) is 0:
+        if self.new_change and (self.changes_count % 2) == 0:
             #If a new change and a hand stroke, leave a gap of 1 bell
             bell = -1
             self.new_change = False

@@ -2,17 +2,9 @@
 # - playing methods without needing an input
 
 import threading
-from time import sleep
-from place_notation_processor import place_notation_processor
+from pibells.core.place_notation_processor import place_notation_processor
+from pibells.core.placenotation import place_notation
 
-class place_notation:
-    """ Class (structure) to hold the place notation and add_tenor flag
-    """
-    def __init__( self, pn_string = None, add_tenor = False ):
-        """ Create the place_notation class with the bell file name and pygame sound object
-        """
-        self.string = pn_string
-        self.add_tenor = add_tenor
 
 class pibells_demo:
     """ Class to play different methods without needing the serial interface
